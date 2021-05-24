@@ -144,7 +144,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         - convert_datetime_type
         - convert_date_type
         - convert_time_type
-        - regex_replace_sql
 
     Macros:
         - get_catalog
@@ -518,20 +517,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedException(
             '`get_columns_in_relation` is not implemented for this adapter!'
         )
-
-    @available.parse_list
-    def incremental_remove_where(self, query):
-        """Remove the last WHERE clause from an incremental query"""
-        # need to remove the last instance of the WHERE clause
-        # reverse the query string to find the last WHERE
-        where_idx = len(query) - (query[::-1].find('EREHW') + len('WHERE')) 
-        # we found a where clause so remove it
-        if where_idx > 0:
-            where_clause = query[where_idx:]
-            return query.replace(where_clause, '')
-        
-        # else return the original string
-        return query
        
     @available.deprecated('get_columns_in_relation', lambda *a, **k: [])
     def get_columns_in_table(
