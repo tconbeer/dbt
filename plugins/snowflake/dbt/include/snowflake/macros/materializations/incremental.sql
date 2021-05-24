@@ -24,7 +24,6 @@
   {% endif %}
 {% endmacro %}
 
-
 {% materialization incremental, adapter='snowflake' -%}
    
   {% set original_query_tag = set_query_tag() %}
@@ -38,7 +37,7 @@
 
   {#-- Validate early so we don't run SQL if the strategy is invalid --#}
   {% set strategy = dbt_snowflake_validate_get_incremental_strategy(config) -%}
-  {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change')) %}
+  {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
 
   -- setup
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
@@ -60,20 +59,19 @@
   
   {% else %}
     {% do run_query(create_table_as(True, tmp_relation, sql)) %}
-    {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
     
-    {% if schema_changed %}
-
-      {% if on_schema_change == 'full_refresh' %}
-         {% do log('running full_refresh', info=true) %}
-         {% set build_sql = create_table_as(False, target_relation, sql) %}
-      
-      {% elif on_schema_change == 'ignore' %}
+    {% if on_schema_change != 'ignore' %}
+      {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
+      {% do log('schema changed: %s' % schema_changed, info=true) %}
+      {% if schema_changed %}
+        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
         {% set dest_columns = adapter.get_columns_in_relation(target_relation) %}
         {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
-
+      
       {% else %}
-        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
+        {% do adapter.expand_target_column_types(
+           from_relation=tmp_relation,
+           to_relation=target_relation) %}
         {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
         {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
         
@@ -83,97 +81,7 @@
       {% do adapter.expand_target_column_types(
            from_relation=tmp_relation,
            to_relation=target_relation) %}
-    
       {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-    
-      {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
-    {% endif %}
-  
-  {% endif %}
-
-  {%- call statement('main') -%}
-    {{ build_sql }}
-  {%- endcall -%}
-
-  {{ run_hooks(post_hooks, inside_transaction=True) }}
-
-  -- `COMMIT` happens here
-  {{ adapter.commit() }}
-
-  {{ run_hooks(post_hooks, inside_transaction=False) }}
-
-  {% set target_relation = target_relation.incorporate(type='table') %}
-  {% do persist_docs(target_relation, model) %}
-
-  {% do unset_query_tag(original_query_tag) %}
-
-  {{ return({'relations': [target_relation]}) }}
-
-{%- endmaterialization %}
-
-
-
-{% materialization incremental, adapter='snowflake' -%}
-   
-  {% set original_query_tag = set_query_tag() %}
-
-  {%- set unique_key = config.get('unique_key') -%}
-  {%- set full_refresh_mode = (should_full_refresh()) -%}
-
-  {% set target_relation = this %}
-  {% set existing_relation = load_relation(this) %}
-  {% set tmp_relation = make_temp_relation(this) %}
-
-  {#-- Validate early so we don't run SQL if the strategy is invalid --#}
-  {% set strategy = dbt_snowflake_validate_get_incremental_strategy(config) -%}
-  {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change')) %}
-
-  -- setup
-  {{ run_hooks(pre_hooks, inside_transaction=False) }}
-
-  -- `BEGIN` happens here:
-  {{ run_hooks(pre_hooks, inside_transaction=True) }}
-
-  {% if existing_relation is none %}
-    {% set build_sql = create_table_as(False, target_relation, sql) %}
-  
-  {% elif existing_relation.is_view %}
-    {#-- Can't overwrite a view with a table - we must drop --#}
-    {{ log("Dropping relation " ~ target_relation ~ " because it is a view and this model is a table.") }}
-    {% do adapter.drop_relation(existing_relation) %}
-    {% set build_sql = create_table_as(False, target_relation, sql) %}
-  
-  {% elif full_refresh_mode %}
-    {% set build_sql = create_table_as(False, target_relation, sql) %}
-  
-  {% else %}
-    {% do run_query(create_table_as(True, tmp_relation, sql)) %}
-    {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
-    
-    {% if schema_changed %}
-
-      {% if on_schema_change == 'full_refresh' %}
-         {% do log('running full_refresh', info=true) %}
-         {% set build_sql = create_table_as(False, target_relation, sql) %}
-      
-      {% elif on_schema_change == 'ignore' %}
-        {% set dest_columns = adapter.get_columns_in_relation(target_relation) %}
-        {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
-
-      {% else %}
-        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
-        {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-        {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
-        
-      {% endif %}
-    
-    {% else %}
-      {% do adapter.expand_target_column_types(
-           from_relation=tmp_relation,
-           to_relation=target_relation) %}
-    
-      {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-    
       {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
     {% endif %}
   
