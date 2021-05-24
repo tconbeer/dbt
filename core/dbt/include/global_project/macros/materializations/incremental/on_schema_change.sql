@@ -1,6 +1,6 @@
 {% macro incremental_validate_on_schema_change(on_schema_change, default='ignore') %}
    
-   {% if on_schema_change not in ['full_refresh', 'sync_all_columns', 'append_new_columns', 'fail', 'ignore'] %}
+   {% if on_schema_change not in ['sync_all_columns', 'append_new_columns', 'fail', 'ignore'] %}
      
      {% set log_message = 'invalid value for on_schema_change (%s) specified. Setting default value of %s.' % (on_schema_change, default_value) %}
      {% do log(log_message, info=true) %}
@@ -89,11 +89,12 @@
   {% if on_schema_change=='append_new_columns' and add_to_target_arr == [] %}
     
     {{ 
-        exceptions.raise_compiler_error('append_new_columns was set, but no new columns to append. Review the schemas in the source and target relations') 
+        exceptions.raise_compiler_error('append_new_columns was set, but no new columns to append. 
+              This can occur when columns are removed from the source dataset unintentionally.
+              Review the schemas in the source and target relations, and consider re-running with the --full-refresh option.') 
     }}
 
   {% endif %}
-
 
   {%- if on_schema_change == 'append_new_columns' -%}
    {%- do alter_relation_add_remove_columns(target_relation, add_to_target_arr) -%}
@@ -117,10 +118,10 @@
     {% if on_schema_change=='fail' %}
       
       {{ 
-        exceptions.raise_compiler_error('The source and target schemas on this incremental model are out of sync!
-             You can specify one of ["fail", "ignore", "add_new_columns", "sync_all_columns", "full_refresh"] in the on_schema_change config to control this behavior.
+        exceptions.raise_compiler_error("The source and target schemas on this incremental model are out of sync!
+             You can specify one of ['fail', 'ignore', 'append_new_columns', 'sync_all_columns'] in the on_schema_change config to control this behavior.
              Please re-run the incremental model with full_refresh set to True to update the target schema.
-             Alternatively, you can update the schema manually and re-run the process.') 
+             Alternatively, you can update the schema manually and re-run the process.") 
       }}
     
     {# unless we ignore, run the sync operation per the config #}

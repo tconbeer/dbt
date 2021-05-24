@@ -19,33 +19,6 @@
   {# -- first check whether we want to full refresh for source view or config reasons #}
   {% set trigger_full_refresh = (full_refresh_mode or existing_relation.is_view) %}
   {% do log('full refresh mode: %s' % trigger_full_refresh) %}
-  
-  {# -- double check whether full refresh should happen if on_schema_change config is True #}
-  {% if not trigger_full_refresh and on_schema_change == 'full_refresh' %}
-    {%- set tmp_relation = make_temp_relation(target_relation) -%}
-    {%- do run_query(create_table_as(True, tmp_relation, sql)) -%}
-
-    {%- set schema_changed = check_for_schema_changes(tmp_relation, target_relation) -%}
-    {%- if schema_changed -%}
-      {%- set trigger_full_refresh = True -%}
-      {%- set sql = adapter.incremental_remove_where(sql) %}
-      {%- do log('detected a schema change with on_schema_change == full_refresh, refreshing table', info=true) -%}
-
-    {%- endif -%}
-
-    {# -- BELOW CODE ALSO WORKS #}
-    {# -- set source_columns = get_columns_in_query(sql) -#}
-    {# -- set target_columns = get_column_names(adapter.get_columns_in_relation(target_relation)) -#}
-    {# -- set source_not_in_target = diff_arrays(source_columns, target_columns) -#}
-    {# -- set target_not_in_source = diff_arrays(target_columns, source_columns) -#}
-    {# -- if source_not_in_target|length > 0 or target_not_in_source|length > 0 -#}
-      {# -- set trigger_full_refresh = True -#}
-      {# -- this removes the WHERE clause from the input model sql in the event a full refresh is needed #}
-      {# -- set sql = adapter.incremental_remove_where(sql) #}
-      {# -- do log('detected a schema change with on_schema_change == full_refresh, refreshing table') -#}
-    {# -- endif -#}
-
-  {% endif %}
 
   {% if existing_relation is none %}
       {% set build_sql = create_table_as(False, target_relation, sql) %}
@@ -70,7 +43,7 @@
     {% set tmp_relation = make_temp_relation(target_relation) %}
     {% do run_query(create_table_as(True, tmp_relation, sql)) %}
     
-    {% if on_schema_change not in ('ignore', 'full_refresh') %}
+    {% if on_schema_change != 'ignore' %}
       {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
       {% do log('schema changed: %s' % schema_changed, info=true) %}
       {% if schema_changed %}
