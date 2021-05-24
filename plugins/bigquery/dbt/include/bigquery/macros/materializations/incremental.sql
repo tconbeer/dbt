@@ -77,6 +77,49 @@
 {% endmacro %}
 
 
+{% macro bq_generate_build_sql(strategy, 
+                               tmp_relation, 
+                               target_relation, 
+                               sql, 
+                               unique_key, 
+                               partition_by, 
+                               partitions, 
+                               dest_columns) %}
+  {#-- if partitioned, use BQ scripting to get the range of partition values to be updated --#}
+  {% if strategy == 'insert_overwrite' %}
+
+    {% set missing_partition_msg -%}
+      The 'insert_overwrite' strategy requires the `partition_by` config.
+    {%- endset %}
+    {% if partition_by is none %}
+      {% do exceptions.raise_compiler_error(missing_partition_msg) %}
+    {% endif %}
+
+    {% set build_sql = bq_insert_overwrite(
+            tmp_relation,
+            target_relation,
+            sql,
+            unique_key,
+            partition_by,
+            partitions,
+            dest_columns) %}
+
+  {% else %}
+       {#-- wrap sql in parens to make it a subquery --#}
+       {%- set source_sql -%}
+         (
+           {{sql}}
+         )
+    {%- endset -%}
+
+    {% set build_sql = get_merge_sql(target_relation, source_sql, unique_key, dest_columns) %}
+
+  {% endif %}
+
+  {{ return(build_sql) }}
+
+{% endmacro %}
+
 {% materialization incremental, adapter='bigquery' -%}
 
   {%- set unique_key = config.get('unique_key') -%}
@@ -94,14 +137,22 @@
   {%- set partitions = config.get('partitions', none) -%}
   {%- set cluster_by = config.get('cluster_by', none) -%}
 
+  {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
+
   {{ run_hooks(pre_hooks) }}
+
+  {# -- first check whether we want to full refresh for source view or config reasons #}
+  {% set trigger_full_refresh = (full_refresh_mode or existing_relation.is_view) %}
+  {% do log('full refresh mode: %s' % trigger_full_refresh) %}
 
   {% if existing_relation is none %}
       {% set build_sql = create_table_as(False, target_relation, sql) %}
+  
   {% elif existing_relation.is_view %}
       {#-- There's no way to atomically replace a view with a table on BQ --#}
       {{ adapter.drop_relation(existing_relation) }}
       {% set build_sql = create_table_as(False, target_relation, sql) %}
+  
   {% elif full_refresh_mode %}
       {#-- If the partition/cluster config has changed, then we must drop and recreate --#}
       {% if not adapter.is_replaceable(existing_relation, partition_by, cluster_by) %}
@@ -109,39 +160,46 @@
           {{ adapter.drop_relation(existing_relation) }}
       {% endif %}
       {% set build_sql = create_table_as(False, target_relation, sql) %}
+  
   {% else %}
-     {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
-
-     {#-- if partitioned, use BQ scripting to get the range of partition values to be updated --#}
-     {% if strategy == 'insert_overwrite' %}
-
-        {% set missing_partition_msg -%}
-          The 'insert_overwrite' strategy requires the `partition_by` config.
-        {%- endset %}
-        {% if partition_by is none %}
-          {% do exceptions.raise_compiler_error(missing_partition_msg) %}
-        {% endif %}
-
-        {% set build_sql = bq_insert_overwrite(
-            tmp_relation,
-            target_relation,
-            sql,
-            unique_key,
-            partition_by,
-            partitions,
-            dest_columns) %}
-
-     {% else %}
-       {#-- wrap sql in parens to make it a subquery --#}
-       {%- set source_sql -%}
-         (
-           {{sql}}
-         )
-       {%- endset -%}
-
-       {% set build_sql = get_merge_sql(target_relation, source_sql, unique_key, dest_columns) %}
+     {% set tmp_relation = make_temp_relation(target_relation) %}
+     {% do run_query(create_table_as(True, tmp_relation, sql)) %}
+     {% if on_schema_change != 'ignore' %}
+      {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
+      {% do log('schema changed: %s' % schema_changed, info=true) %}
+      {% if schema_changed %}
+        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
+        {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
+        {% set build_sql = bq_generate_build_sql(strategy, 
+                               tmp_relation, 
+                               target_relation, 
+                               sql, 
+                               unique_key, 
+                               partition_by, 
+                               partitions, 
+                               dest_columns) %}
+      {% endif %}
+        {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
+        {% set build_sql = bq_generate_build_sql(strategy, 
+                               tmp_relation, 
+                               target_relation, 
+                               sql, 
+                               unique_key, 
+                               partition_by, 
+                               partitions, 
+                               dest_columns) %}
 
      {% endif %}
+     {# -- getting the columns from tmp_relation means the upsert proceeds in the ignore case when we drop columns#}
+     {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
+     {% set build_sql = bq_generate_build_sql(strategy, 
+                               tmp_relation, 
+                               target_relation, 
+                               sql, 
+                               unique_key, 
+                               partition_by, 
+                               partitions, 
+                               dest_columns) %}
 
   {% endif %}
 
