@@ -517,7 +517,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedException(
             '`get_columns_in_relation` is not implemented for this adapter!'
         )
-       
+
     @available.deprecated('get_columns_in_relation', lambda *a, **k: [])
     def get_columns_in_table(
         self, schema: str, identifier: str
@@ -804,7 +804,6 @@ class BaseAdapter(metaclass=AdapterMeta):
             return self.quote(identifier)
         else:
             return identifier
-
 
     @available
     def quote_seed_column(
