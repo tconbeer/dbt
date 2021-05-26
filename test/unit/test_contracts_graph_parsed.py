@@ -153,6 +153,7 @@ def base_parsed_model_dict():
             'quoting': {},
             'tags': [],
             'vars': {},
+            'on_schema_change': 'ignore'
         },
         'deferred': False,
         'docs': {'show': True},
@@ -241,6 +242,7 @@ def complex_parsed_model_dict():
             'quoting': {},
             'tags': [],
             'vars': {'foo': 100},
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': True},
         'columns': {
@@ -435,6 +437,7 @@ def basic_parsed_seed_dict():
             'quoting': {},
             'tags': [],
             'vars': {},
+            'on_schema_change': 'ignore'
         },
         'deferred': False,
         'docs': {'show': True},
@@ -526,6 +529,7 @@ def complex_parsed_seed_dict():
             'tags': [],
             'vars': {},
             'quote_columns': True,
+            'on_schema_change': 'ignore'
         },
         'deferred': False,
         'docs': {'show': True},
@@ -777,6 +781,7 @@ def base_parsed_hook_dict():
             'quoting': {},
             'tags': [],
             'vars': {},
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': True},
         'columns': {},
@@ -846,6 +851,7 @@ def complex_parsed_hook_dict():
             'quoting': {},
             'tags': [],
             'vars': {},
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': True},
         'columns': {
@@ -987,6 +993,7 @@ def basic_parsed_schema_test_dict():
             'tags': [],
             'vars': {},
             'severity': 'ERROR',
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': True},
         'columns': {},
@@ -1059,7 +1066,8 @@ def complex_parsed_schema_test_dict():
             'tags': [],
             'vars': {},
             'severity': 'WARN',
-            'extra_key': 'extra value'
+            'extra_key': 'extra value',
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': False},
         'columns': {
@@ -1387,6 +1395,7 @@ def basic_timestamp_snapshot_dict():
             'unique_key': 'id',
             'strategy': 'timestamp',
             'updated_at': 'last_update',
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': True},
         'columns': {},
@@ -1517,6 +1526,7 @@ def basic_check_snapshot_dict():
             'unique_key': 'id',
             'strategy': 'check',
             'check_cols': 'all',
+            'on_schema_change': 'ignore'
         },
         'docs': {'show': True},
         'columns': {},
