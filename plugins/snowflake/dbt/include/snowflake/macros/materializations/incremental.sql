@@ -58,30 +58,32 @@
     {% set build_sql = create_table_as(False, target_relation, sql) %}
   
   {% else %}
-    {% do run_query(create_table_as(True, tmp_relation, sql)) %}
+    {% set tmp_sql %}
+     select * from ({{ sql }}) where false limit 0
+    {% endset %}
+    {% do run_query(create_table_as(True, tmp_relation, tmp_sql)) %}
+    {% do adapter.expand_target_column_types(
+           from_relation=tmp_relation,
+           to_relation=target_relation) %}
     
     {% if on_schema_change != 'ignore' %}
-      {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
-      {% do log('schema changed: %s' % schema_changed, info=true) %}
-      {% if schema_changed %}
-        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
-        {% set dest_columns = adapter.get_columns_in_relation(target_relation) %}
+      {% set schema_changes_dict = check_for_schema_changes(tmp_relation, target_relation) %}
+      {% if schema_changes_dict['schema_changed'] %}
+        {% do process_schema_changes(on_schema_change, existing_relation, schema_changes_dict) %}
+        {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
+        {% do run_query(create_table_as(True, tmp_relation, sql)) %}
         {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
       
       {% else %}
-        {% do adapter.expand_target_column_types(
-           from_relation=tmp_relation,
-           to_relation=target_relation) %}
         {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
+        {% do run_query(create_table_as(True, tmp_relation, sql)) %}
         {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
         
       {% endif %}
     
     {% else %}
-      {% do adapter.expand_target_column_types(
-           from_relation=tmp_relation,
-           to_relation=target_relation) %}
       {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
+      {% do run_query(create_table_as(True, tmp_relation, sql)) %}
       {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
     {% endif %}
   

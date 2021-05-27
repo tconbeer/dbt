@@ -15,28 +15,9 @@
 {% endmacro %}
 
 {% macro get_column_names(columns) %}
-
-  {% set result = [] %}
   
-  {% for col in columns %}
-    {{ result.append(col.column) }}
-  {% endfor %}
-  
-  {{ return(result) }}
-
-{% endmacro %}
-
-{% macro diff_arrays(source_array, target_array) %}
-  
-  {% set result = [] %}
-  {%- for elem in source_array -%}
-     {% if elem not in target_array %}
-       
-       {{ result.append(elem) }}
-
-     {% endif %}
-
-  {%- endfor -%}
+  {# -- this needs the | list or comparisons downstream don't work against the generators which come out of map() #}
+  {% set result = columns | map(attribute = 'column') | list %}
 
   {{ return(result) }}
 
@@ -48,13 +29,31 @@
   {% set source_names = get_column_names(source_columns) %}
   {% set target_names = get_column_names(target_columns) %}
    
-   {# --check whether the name attribute exists in the target, but dont worry about data type differences #}
-   {%- for col in source_columns -%} 
-     {%- if col.column not in target_names -%}
-      {{ result.append(col) }}
-      {%- endif -%}
-   {%- endfor -%}
+   {# --check whether the name attribute exists in the target - this does not perform a data type check #}
+   {% for sc in source_columns %}
+     {% if sc.name not in target_names %}
+        {{ result.append(sc) }}
+     {% endif %}
+   {% endfor %}
   
+  {{ return(result) }}
+
+{% endmacro %}
+
+{% macro diff_column_data_types(source_columns, target_columns) %}
+  
+  {% set result = [] %}
+  {% for sc in source_columns %}
+    {% do log(sc.data_type, info=true) %}
+    {% set tc = target_columns | selectattr("name", "equalto", sc.name) | list | first %}
+    {% if tc %}
+      {% do log(tc.data_type, info=true) %}
+      {% if sc.data_type != tc.data_type %}
+        {{ result.append( { 'column_name': tc.name, 'new_type': sc.data_type } ) }} 
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+
   {{ return(result) }}
 
 {% endmacro %}
@@ -67,53 +66,77 @@
   {%- set target_columns = adapter.get_columns_in_relation(target_relation) -%}
   {%- set source_not_in_target = diff_columns(source_columns, target_columns) -%}
   {%- set target_not_in_source = diff_columns(target_columns, source_columns) -%}
+  
+  {% set new_target_types = diff_column_data_types(source_columns, target_columns) %}
 
   {% if source_not_in_target != [] %}
     {% set schema_changed = True %}
-  {% elif target_not_in_source != [] %}
+  {% elif target_not_in_source != [] or new_target_types != [] %}
+    {% set schema_changed = True %}
+  {% elif new_target_types != [] %}
     {% set schema_changed = True %}
   {% endif %}
 
-  {{ return(schema_changed) }}
+  {% do log('schema changed: %s' % schema_changed, info=true) %}
+  {% do log('source_not_in_target: %s' % source_not_in_target, info=true) %}
+  {% do log('target_not_in_source: %s' % target_not_in_source, info=true) %}
+  {% do log('new data types: %s' % new_target_types, info=true) %}
+
+  {{ 
+    return({
+      'schema_changed': schema_changed,
+      'source_not_in_target': source_not_in_target,
+      'target_not_in_source': target_not_in_source,
+      'new_target_types': new_target_types
+    }) 
+  }}
 
 {% endmacro %}
 
-{% macro sync_schemas(source_relation, target_relation, on_schema_change='append_new_columns') %}
-  
-  {%- set source_columns = adapter.get_columns_in_relation(source_relation) -%}
-  {%- set target_columns = adapter.get_columns_in_relation(target_relation) -%}
-  {%- set add_to_target_arr = diff_columns(source_columns, target_columns) -%}
-  {%- set remove_from_target_arr = diff_columns(target_columns, source_columns) -%}
-  
-  -- Validates on_schema_change config vs. whether there are column differences
-  {% if on_schema_change=='append_new_columns' and add_to_target_arr == [] %}
-    
-    {{ 
-        exceptions.raise_compiler_error('append_new_columns was set, but no new columns to append. 
-              This can occur when columns are removed from the source dataset unintentionally.
-              Review the schemas in the source and target relations, and consider re-running with the --full-refresh option.') 
-    }}
+{% macro sync_schemas(on_schema_change, target_relation, schema_changes_dict) %}
 
-  {% endif %}
+  {%- set add_to_target_arr = schema_changes_dict['source_not_in_target'] -%}
+  {%- set remove_from_target_arr = schema_changes_dict['target_not_in_source'] -%}
+  {%- set new_target_types = schema_changes_dict['new_target_types'] -%}
 
-  {%- if on_schema_change == 'append_new_columns' -%}
-   {%- do alter_relation_add_remove_columns(target_relation, add_to_target_arr) -%}
+  {%- if on_schema_change == 'append_new_columns'-%}
+     {%- if add_to_target_arr | length > 0 -%}
+       {%- do alter_relation_add_columns(target_relation, add_to_target_arr) -%}
+     {%- endif -%}
+  
   {% elif on_schema_change == 'sync_all_columns' %}
-   {%- do alter_relation_add_remove_columns(target_relation, add_to_target_arr, remove_from_target_arr) -%}
+     {% if add_to_target_arr | length > 0 %} 
+       {%- do alter_relation_add_columns(target_relation, add_to_target_arr) -%}
+     {% endif %}
+
+     {% if remove_from_target_arr | length > 0 %}
+       {%- do alter_relation_drop_columns(target_relation, remove_from_target_arr) -%}
+     {% endif %}
+
+     {% if new_target_types != [] %}
+       {% for ntt in new_target_types %}
+         {% do log(ntt, info=true) %}
+         {% set column_name = ntt['column_name'] %}
+         {% set new_type = ntt['new_type'] %}
+         {% do alter_column_type(target_relation, column_name, new_type) %}
+       {% endfor %}
+     {% endif %}
+  
   {% endif %}
 
   {{ 
       return(
              {
               'columns_added': add_to_target_arr,
-              'columns_removed': remove_from_target_arr
+              'columns_removed': remove_from_target_arr,
+              'data_types_changed': new_target_types
              }
           )
   }}
   
 {% endmacro %}
 
-{% macro process_schema_changes(on_schema_change, source_relation, target_relation) %}
+{% macro process_schema_changes(on_schema_change, target_relation, schema_changes_dict) %}
       
     {% if on_schema_change=='fail' %}
       
@@ -124,14 +147,24 @@
              Alternatively, you can update the schema manually and re-run the process.") 
       }}
     
-    {# unless we ignore, run the sync operation per the config #}
+    {# -- unless we ignore, run the sync operation per the config #}
     {% else %}
       
-      {% set schema_changes = sync_schemas(source_relation, target_relation, on_schema_change) %}
+      {% set schema_changes = sync_schemas(on_schema_change, target_relation, schema_changes_dict) %}
       {% set columns_added = schema_changes['columns_added'] %}
       {% set columns_removed = schema_changes['columns_removed'] %}
-      {% do log('columns added: ' + columns_added|join(', '), info=true) %}
-      {% do log('columns removed: ' + columns_removed|join(', '), info=true) %}
+      {% set data_types_changed = schema_changes['data_types_changed'] %}
+
+      {% if on_schema_change == 'append_new_columns' %}
+        {% do log('columns added: ' + columns_added|join(', '), info=true) %}
+      
+      {% elif on_schema_change == 'sync_all_columns' %}
+        {% do log('columns added: ' + columns_added|join(', '), info=true) %}
+        {% do log('columns removed: ' + columns_removed|join(', '), info=true) %}
+        {% do log('data types changed: ' + columns_removed|join(', '), info=true) %}
+      
+      {% endif %}
+      
     
     {% endif %}
 
