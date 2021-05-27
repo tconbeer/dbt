@@ -44,10 +44,8 @@
   
   {% set result = [] %}
   {% for sc in source_columns %}
-    {% do log(sc.data_type, info=true) %}
     {% set tc = target_columns | selectattr("name", "equalto", sc.name) | list | first %}
     {% if tc %}
-      {% do log(tc.data_type, info=true) %}
       {% if sc.data_type != tc.data_type %}
         {{ result.append( { 'column_name': tc.name, 'new_type': sc.data_type } ) }} 
       {% endif %}
@@ -161,7 +159,7 @@
       {% elif on_schema_change == 'sync_all_columns' %}
         {% do log('columns added: ' + columns_added|join(', '), info=true) %}
         {% do log('columns removed: ' + columns_removed|join(', '), info=true) %}
-        {% do log('data types changed: ' + columns_removed|join(', '), info=true) %}
+        {% do log('data types changed: ' + data_types_changed|join(', '), info=true) %}
       
       {% endif %}
       
