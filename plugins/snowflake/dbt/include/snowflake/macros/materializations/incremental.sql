@@ -70,22 +70,12 @@
       {% set schema_changes_dict = check_for_schema_changes(tmp_relation, target_relation) %}
       {% if schema_changes_dict['schema_changed'] %}
         {% do process_schema_changes(on_schema_change, existing_relation, schema_changes_dict) %}
-        {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-        {% do run_query(create_table_as(True, tmp_relation, sql)) %}
-        {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
-      
-      {% else %}
-        {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-        {% do run_query(create_table_as(True, tmp_relation, sql)) %}
-        {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
-        
       {% endif %}
-    
-    {% else %}
-      {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-      {% do run_query(create_table_as(True, tmp_relation, sql)) %}
-      {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
     {% endif %}
+      
+    {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
+    {% do run_query(create_table_as(True, tmp_relation, sql)) %}
+    {% set build_sql = dbt_snowflake_get_incremental_sql(strategy, tmp_relation, target_relation, unique_key, dest_columns) %}
   
   {% endif %}
 
