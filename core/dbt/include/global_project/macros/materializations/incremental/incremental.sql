@@ -8,6 +8,7 @@
   {%- set full_refresh_mode = (should_full_refresh()) -%}
 
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
+  {% set alter_column_types = incremental_validate_alter_column_types(config.get('alter_column_types'), default=False) %}
 
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
 
@@ -40,30 +41,25 @@
       {% do to_drop.append(backup_relation) %}
   
   {% else %}
-    {% set tmp_relation = make_temp_relation(target_relation) %}
-    {% do run_query(create_table_as(True, tmp_relation, sql)) %}
+    {% set tmp_sql %}
+     select * from ({{ sql }}) as tmp_sql where false limit 0
+    {% endset %}
+    {% set test_relation = make_temp_relation(target_relation) %}
+    {% do run_query(create_table_as(True, test_relation, tmp_sql)) %}
     {% do adapter.expand_target_column_types(
-             from_relation=tmp_relation,
+             from_relation=test_relation,
              to_relation=target_relation) %}
     
     {% if on_schema_change != 'ignore' %}
-      {% set tmp_sql %}
-         select * from ({{ sql }}) where false limit 0
-      {% endset %}
-      {% do run_query(create_table_as(True, tmp_relation, tmp_sql)) %}
-      {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
-      
-      {% if schema_changed %}
-        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
-        {% set build_sql = incremental_upsert(tmp_relation, target_relation, unique_key=unique_key) %}
-      
-      {% else %}
-        {% set build_sql = incremental_upsert(tmp_relation, target_relation, unique_key=unique_key) %}
+      {% set schema_changes_dict = check_for_schema_changes(test_relation, target_relation) %}
+      {% if schema_changes_dict['schema_changed'] %}
+        {% do process_schema_changes(on_schema_change, alter_column_types, existing_relation, schema_changes_dict) %}
       {% endif %}
-    
-    {% else %}
-      {% set build_sql = incremental_upsert(tmp_relation, target_relation, unique_key=unique_key) %}
     {% endif %}
+    
+    {% set tmp_relation = make_temp_relation(target_relation) %}
+    {% do run_query(create_table_as(True, tmp_relation, sql)) %}
+    {% set build_sql = incremental_upsert(tmp_relation, target_relation, unique_key=unique_key) %}
   
   {% endif %}
 

@@ -311,6 +311,48 @@
   {{ config.set('sql_header', caller()) }}
 {%- endmacro %}
 
+{% macro alter_relation_add_columns(relation, add_columns = none) -%}
+  {{ return(adapter.dispatch('alter_relation_add_columns')(relation, add_columns)) }}
+{% endmacro %}
+
+{% macro default__alter_relation_add_columns(relation, add_columns) %}
+  
+  {% set sql -%}
+     
+     alter {{ relation.type }} {{ relation }}
+       
+       add column
+            {% for column in add_columns %}
+              {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+            {% endfor %}
+  
+  {%- endset -%}
+
+  {{ return(run_query(sql)) }}
+
+{% endmacro %}
+
+{% macro alter_relation_drop_columns(relation, drop_columns = none) -%}
+  {{ return(adapter.dispatch('alter_relation_drop_columns')(relation, drop_columns)) }}
+{% endmacro %}
+
+{% macro default__alter_relation_drop_columns(relation, drop_columns) %}
+  
+  {% set sql -%}
+     
+     alter {{ relation.type }} {{ relation }}
+       
+       drop column
+            {% for column in drop_columns %}
+              {{ column.name }}{{ ',' if not loop.last }}
+            {% endfor %}
+  
+  {%- endset -%}
+  
+  {{ return(run_query(sql)) }}
+
+{% endmacro %}
+
 {% macro alter_relation_add_remove_columns(relation, add_columns = none, remove_columns = none) -%}
   {{ return(adapter.dispatch('alter_relation_add_remove_columns')(relation, add_columns, remove_columns)) }}
 {% endmacro %}
