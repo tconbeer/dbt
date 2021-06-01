@@ -138,6 +138,7 @@
   {%- set cluster_by = config.get('cluster_by', none) -%}
 
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
+  {% set alter_column_types = incremental_validate_alter_column_types(config.get('alter_column_types'), default=False) %}
 
   {{ run_hooks(pre_hooks) }}
 
@@ -162,37 +163,23 @@
       {% set build_sql = create_table_as(False, target_relation, sql) %}
   
   {% else %}
-     {% set tmp_relation = make_temp_relation(target_relation) %}
-     {% do run_query(create_table_as(True, tmp_relation, sql)) %}
-     {% if on_schema_change != 'ignore' %}
-      {% set schema_changed = check_for_schema_changes(tmp_relation, target_relation) %}
-      {% do log('schema changed: %s' % schema_changed, info=true) %}
-      {% if schema_changed %}
-        {% do process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
-        {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
-        {% set build_sql = bq_generate_build_sql(strategy, 
-                               tmp_relation, 
-                               target_relation, 
-                               sql, 
-                               unique_key, 
-                               partition_by, 
-                               partitions, 
-                               dest_columns) %}
+    {% set tmp_sql %}
+      select * from ({{ sql }}) where false limit 0
+    {% endset %}
+    {% do run_query(create_table_as(True, tmp_relation, tmp_sql)) %}
+    {% do adapter.expand_target_column_types(
+           from_relation=tmp_relation,
+           to_relation=target_relation) %}
+    
+    {% if on_schema_change != 'ignore' %}
+      {% set schema_changes_dict = check_for_schema_changes(tmp_relation, target_relation) %}
+      {% if schema_changes_dict['schema_changed'] %}
+        {% do process_schema_changes(on_schema_change, alter_column_types, existing_relation, schema_changes_dict) %}
       {% endif %}
-        {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
-        {% set build_sql = bq_generate_build_sql(strategy, 
-                               tmp_relation, 
-                               target_relation, 
-                               sql, 
-                               unique_key, 
-                               partition_by, 
-                               partitions, 
-                               dest_columns) %}
-
-     {% endif %}
-     {# -- getting the columns from tmp_relation means the upsert proceeds in the ignore case when we drop columns#}
-     {% set dest_columns = adapter.get_columns_in_relation(tmp_relation) %}
-     {% set build_sql = bq_generate_build_sql(strategy, 
+    {% endif %}
+    
+    {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
+    {% set build_sql = bq_generate_build_sql(strategy, 
                                tmp_relation, 
                                target_relation, 
                                sql, 

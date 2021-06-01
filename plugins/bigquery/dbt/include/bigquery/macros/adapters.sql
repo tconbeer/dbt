@@ -128,8 +128,43 @@
   {% do adapter.rename_relation(from_relation, to_relation) %}
 {% endmacro %}
 
-{% macro alter_relation_add_remove_columns(relation, add_columns = none, remove_columns = none) -%}
-  {{ return(adapter.dispatch('alter_relation_add_remove_columns')(relation, add_columns, remove_columns)) }}
+{% macro alter_relation_add_columns(relation, add_columns = none) -%}
+  {{ return(adapter.dispatch('alter_relation_add_columns')(relation, add_columns)) }}
+{% endmacro %}
+
+{% macro bigquery__alter_relation_add_columns(relation, add_columns) %}
+  
+  {% set sql -%}
+     
+     alter {{ relation.type }} {{ relation }}
+        {% for column in add_columns %}
+          add column {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+        {% endfor %}
+  
+  {%- endset -%}
+
+  {{ return(run_query(sql)) }}
+
+{% endmacro %}
+
+{% macro alter_relation_drop_columns(relation, add_columns = none) -%}
+  {{ return(adapter.dispatch('alter_relation_drop_columns')(relation, add_columns)) }}
+{% endmacro %}
+
+{% macro bigquery__alter_relation_drop_columns(relation, drop_columns) %}
+  
+  {% set sql -%}
+     
+     alter {{ relation.type }} {{ relation }}
+
+        {% for column in drop_columns %}
+          drop column {{ column.name }}{{ ',' if not loop.last }}
+        {% endfor %}
+  
+  {%- endset -%}
+  
+  {{ return(run_query(sql)) }}
+
 {% endmacro %}
 
 {% macro bigquery__alter_relation_add_remove_columns(relation, add_columns = none, remove_columns = none) -%}

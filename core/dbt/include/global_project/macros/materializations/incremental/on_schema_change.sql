@@ -2,13 +2,29 @@
    
    {% if on_schema_change not in ['sync_all_columns', 'append_new_columns', 'fail', 'ignore'] %}
      
-     {% set log_message = 'invalid value for on_schema_change (%s) specified. Setting default value of %s.' % (on_schema_change, default_value) %}
+     {% set log_message = 'invalid value for on_schema_change (%s) specified. Setting default value of %s.' % (on_schema_change, default) %}
      {% do log(log_message, info=true) %}
      
      {{ return(default) }}
 
    {% else %}
      {{ return(on_schema_change) }}
+   
+   {% endif %}
+
+{% endmacro %}
+
+{% macro incremental_validate_alter_column_types(alter_column_types, default=False) %}
+   
+   {% if alter_column_types not in [True, False] %}
+     
+     {% set log_message = 'invalid value for alter_column_types (%s) specified. Setting default value of %s.' % (alter_column_types, default) %}
+     {% do log(log_message, info=true) %}
+
+     {{ return(default) }}
+
+   {% else %}
+     {{ return(alter_column_types) }}
    
    {% endif %}
 
@@ -91,7 +107,7 @@
 
 {% endmacro %}
 
-{% macro sync_schemas(on_schema_change, target_relation, schema_changes_dict) %}
+{% macro sync_schemas(on_schema_change, alter_column_types, target_relation, schema_changes_dict) %}
 
   {%- set add_to_target_arr = schema_changes_dict['source_not_in_target'] -%}
   {%- set remove_from_target_arr = schema_changes_dict['target_not_in_source'] -%}
@@ -111,7 +127,7 @@
        {%- do alter_relation_drop_columns(target_relation, remove_from_target_arr) -%}
      {% endif %}
 
-     {% if new_target_types != [] %}
+     {% if alter_column_types == True and new_target_types != [] %}
        {% for ntt in new_target_types %}
          {% do log(ntt, info=true) %}
          {% set column_name = ntt['column_name'] %}
@@ -134,7 +150,7 @@
   
 {% endmacro %}
 
-{% macro process_schema_changes(on_schema_change, target_relation, schema_changes_dict) %}
+{% macro process_schema_changes(on_schema_change, alter_column_types, target_relation, schema_changes_dict) %}
       
     {% if on_schema_change=='fail' %}
       
@@ -148,7 +164,7 @@
     {# -- unless we ignore, run the sync operation per the config #}
     {% else %}
       
-      {% set schema_changes = sync_schemas(on_schema_change, target_relation, schema_changes_dict) %}
+      {% set schema_changes = sync_schemas(on_schema_change, alter_column_types, target_relation, schema_changes_dict) %}
       {% set columns_added = schema_changes['columns_added'] %}
       {% set columns_removed = schema_changes['columns_removed'] %}
       {% set data_types_changed = schema_changes['data_types_changed'] %}
