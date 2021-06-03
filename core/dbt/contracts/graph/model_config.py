@@ -394,7 +394,8 @@ class NodeConfig(BaseConfig):
                        CompareBehavior.Exclude),
     )
     full_refresh: Optional[bool] = None
-    on_schema_change: str = 'ignore'
+    on_schema_change: Optional[str] = 'ignore'
+    alter_column_types: Optional[bool] = None
 
     @classmethod
     def __pre_deserialize__(cls, data):
