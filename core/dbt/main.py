@@ -395,7 +395,7 @@ def _build_build_subparser(subparsers, base_subparser):
         '--fail-fast',
         action='store_true',
         help='''
-        Stop execution upon a first failure.
+        Stop execution upon a first failure. (NOT YET IMPLEMENTED)
         '''
     )
     return sub
@@ -1075,7 +1075,7 @@ def parse_args(args, cls=DBTArgumentParser):
                           rpc_sub, seed_sub, parse_sub)
     # --models, --exclude
     # list_sub sets up its own arguments.
-    _add_selection_arguments(run_sub, build_sub, compile_sub, generate_sub, test_sub)
+    _add_selection_arguments(build_sub, run_sub, compile_sub, generate_sub, test_sub)
     _add_selection_arguments(snapshot_sub, seed_sub, models_name='select')
     # --defer
     _add_defer_argument(run_sub, test_sub)
