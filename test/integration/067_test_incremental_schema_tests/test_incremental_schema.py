@@ -28,6 +28,7 @@ class TestSelectionExpansion(DBTIntegrationTest):
             list_args.extend(('--exclude', exclude))
         
         listed = self.run_dbt(list_args)
+        print(listed)
         assert len(listed) == len(expected_tests)
         
         test_names = [name.split('.')[2] for name in listed]
@@ -35,9 +36,17 @@ class TestSelectionExpansion(DBTIntegrationTest):
 
     def run_tests_and_assert(
         self, include, exclude, expected_tests, schema = False, data = False
-    ):
-        results = self.run_dbt(['run'])
-        self.assertEqual(len(results), 2)
+    ):  
+
+        run_args = ['run']
+        if include:
+            run_args.extend(('--models', include))
+        
+        results_one = self.run_dbt(run_args)
+        results_two = self.run_dbt(run_args)
+
+        self.assertEqual(len(results_one), 3)
+        self.assertEqual(len(results_two), 3)
          
         test_args = ['test']
         if include:
@@ -53,17 +62,19 @@ class TestSelectionExpansion(DBTIntegrationTest):
         tests_run = [r.node.name for r in results]
         assert len(tests_run) == len(expected_tests)
         assert sorted(tests_run) == sorted(expected_tests)
-        self.assertTablesEqual('model_a', 'incremental')
+        self.assertTablesEqual('incremental_ignore', 'incremental_ignore_target')
 
     @use_profile('postgres')
-    def test__postgres__run_incremental_models(self):
-        select = 'model_a incremental'
+    def test__postgres__run_incremental_ignore(self):
+        select = 'model_a incremental_ignore incremental_ignore_target'
         exclude = None
         expected = [
             'select_from_a',
-            'select_from_incremental',
+            'select_from_incremental_ignore',
+            'select_from_incremental_ignore_target',
             'unique_model_a_id',
-            'unique_incremental_id'
+            'unique_incremental_ignore_id',
+            'unique_incremental_ignore_target_id'
         ]
             
         self.list_tests_and_assert(select, exclude, expected)

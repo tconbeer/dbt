@@ -8,9 +8,18 @@ models:
         tests:
           - unique
 
-  - name: incremental
+  - name: incremental_ignore
     columns:
       - name: id
         tags: [column_level_tag]
         tests:
           - unique
+  
+  - name: incremental_ignore_target
+    columns:
+      - name: id
+        tags: [column_level_tag]
+        tests:
+          - unique
+  
+  
