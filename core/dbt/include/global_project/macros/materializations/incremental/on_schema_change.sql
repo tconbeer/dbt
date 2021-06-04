@@ -94,7 +94,6 @@
   {% do log('schema changed: %s' % schema_changed, info=true) %}
   {% do log('source_not_in_target: %s' % source_not_in_target, info=true) %}
   {% do log('target_not_in_source: %s' % target_not_in_source, info=true) %}
-  {% do log('new data types: %s' % new_target_types, info=true) %}
 
   {{ 
     return({

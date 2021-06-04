@@ -35,7 +35,7 @@ class TestSelectionExpansion(DBTIntegrationTest):
         assert sorted(test_names) == sorted(expected_tests)
 
     def run_tests_and_assert(
-        self, include, exclude, expected_tests, schema = False, data = False
+        self, include, exclude, expected_tests, compare_source, compare_target, schema = False, data = False
     ):  
 
         run_args = ['run']
@@ -62,11 +62,13 @@ class TestSelectionExpansion(DBTIntegrationTest):
         tests_run = [r.node.name for r in results]
         assert len(tests_run) == len(expected_tests)
         assert sorted(tests_run) == sorted(expected_tests)
-        self.assertTablesEqual('incremental_ignore', 'incremental_ignore_target')
+        self.assertTablesEqual(compare_source, compare_source)
 
     @use_profile('postgres')
     def test__postgres__run_incremental_ignore(self):
         select = 'model_a incremental_ignore incremental_ignore_target'
+        compare_source = 'incremental_ignore'
+        compare_target = 'incremental_ignore_target'
         exclude = None
         expected = [
             'select_from_a',
@@ -78,7 +80,26 @@ class TestSelectionExpansion(DBTIntegrationTest):
         ]
             
         self.list_tests_and_assert(select, exclude, expected)
-        self.run_tests_and_assert(select, exclude, expected)
+        self.run_tests_and_assert(select, exclude, expected, compare_source, compare_target)
+    
+    @use_profile('postgres')
+    def test__postgres__run_incremental_append_new_columns(self):
+        select = 'model_a incremental_append_new_columns incremental_append_new_columns_target'
+        compare_source = 'incremental_append_new_columns'
+        compare_target = 'incremental_append_new_columns_target'
+        exclude = None
+        expected = [
+            'select_from_a',
+            'select_from_incremental_append_new_columns',
+            'select_from_incremental_append_new_columns_target',
+            'unique_model_a_id',
+            'unique_incremental_append_new_columns_id',
+            'unique_incremental_append_new_columns_target_id'
+        ]
+            
+        self.list_tests_and_assert(select, exclude, expected)
+        self.run_tests_and_assert(select, exclude, expected, compare_source, compare_target)
+
 
     # @use_profile('postgres')
     # def test__postgres__model_a_alone(self):
