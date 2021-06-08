@@ -72,7 +72,7 @@ setup(
         'minimal-snowplow-tracker==0.0.2',
         'networkx>=2.3,<3',
         'packaging~=20.9',
-        'sqlparse>=0.2.3,<0.4',
+        'sqlparse>=0.2.3,<0.5',
         'tree-sitter==0.19.0',
         'tree-sitter-jinja2==0.1.0a1',
         'typing-extensions>=3.7.4,<3.8',
