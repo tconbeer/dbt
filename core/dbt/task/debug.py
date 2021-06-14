@@ -8,12 +8,13 @@ from dbt.logger import GLOBAL_LOGGER as logger
 import dbt.clients.system
 import dbt.exceptions
 from dbt.adapters.factory import get_adapter, register_adapter
-from dbt.config import Project, Profile, PROFILES_DIR
+from dbt.config import Project, Profile, PROFILES_DIR, UnsetProfileConfig
 from dbt.config.renderer import DbtProjectYamlRenderer, ProfileRenderer
 from dbt.config.utils import parse_cli_vars
 from dbt.context.base import generate_base_context
 from dbt.context.target import generate_target_context
 from dbt.clients.yaml_helper import load_yaml_text
+from dbt.deps.resolver import PackageListing
 from dbt.links import ProfileConfigDocs
 from dbt.ui import green, red
 from dbt.version import get_installed_version
@@ -66,7 +67,9 @@ class QueryCommentedProfile(Profile):
 
 
 class DebugTask(BaseTask):
-    def __init__(self, args, config):
+    ConfigType = UnsetProfileConfig
+
+    def __init__(self, args, config: UnsetProfileConfig):
         super().__init__(args, config)
         self.profiles_dir = getattr(self.args, 'profiles_dir', PROFILES_DIR)
         self.profile_path = os.path.join(self.profiles_dir, 'profiles.yml')
@@ -89,6 +92,7 @@ class DebugTask(BaseTask):
         self.profile_name: Optional[str] = None
         self.project: Optional[Project] = None
         self.project_fail_details = ''
+        self.packages = None
         self.any_failure = False
         self.messages: List[str] = []
 
@@ -123,6 +127,7 @@ class DebugTask(BaseTask):
         print('')
         self.test_configuration()
         self.test_dependencies()
+        self.test_packages()
         self.test_connection()
 
         for message in self.messages:
@@ -313,6 +318,17 @@ class DebugTask(BaseTask):
         print('')
         self._log_project_fail()
         self._log_profile_fail()
+
+    def test_packages(self):
+        print('Packages Specified in packages.yml:')
+        package_contract_list = self.config.packages.packages
+        if package_contract_list:
+            resolved_packages = PackageListing.from_contracts(package_contract_list).resolved()
+            for package in resolved_packages:
+                print(' - {}'.format(package))
+        else:
+            print('No packages specified in packages.yml')
+        print('')
 
     def _log_project_fail(self):
         if not self.project_fail_details:
