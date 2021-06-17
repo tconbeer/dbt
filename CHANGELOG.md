@@ -12,6 +12,9 @@ Contributors:
 
 ## dbt 0.20.0 (Release TBD)
 
+### Under the hood
+- Improve view and table materialization performance by checking relational cache before attempting to drop temp relations ([#3112](https://github.com/fishtown-analytics/dbt/issues/3112), [#3468](https://github.com/fishtown-analytics/dbt/pull/3468))
+
 ## dbt 0.20.0rc1 (June 04, 2021)
 
 
